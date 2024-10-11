@@ -1,15 +1,30 @@
-// main.js
-import redisClient from './utils/redis';
+import dbClient from './utils/db';
+
+const waitConnection = () => {
+    return new Promise((resolve, reject) => {
+        let i = 0;
+        const repeatFct = async () => {
+            await setTimeout(() => {
+                i += 1;
+                if (i >= 10) {
+                    reject()
+                }
+                else if(!dbClient.isAlive()) {
+                    repeatFct()
+                }
+                else {
+                    resolve()
+                }
+            }, 1000);
+        };
+        repeatFct();
+    })
+};
 
 (async () => {
-    console.log(redisClient.isAlive());          // Check if Redis is alive
-    console.log(await redisClient.get('myKey')); // Should return null if not set
-
-    await redisClient.set('myKey', 12, 5);       // Set a key with value 12 and expiration of 5 seconds
-    console.log(await redisClient.get('myKey')); // Should return 12
-
-    // Wait for 10 seconds and check if the key expired
-    setTimeout(async () => {
-        console.log(await redisClient.get('myKey')); // Should return null (expired)
-    }, 1000 * 10);
+    console.log(dbClient.isAlive());
+    await waitConnection();
+    console.log(dbClient.isAlive());
+    console.log(await dbClient.nbUsers());
+    console.log(await dbClient.nbFiles());
 })();
