@@ -3,6 +3,7 @@ import dbClient from '../utils/db';
 import redisClient from '../utils/redis';
 import fs from 'fs';
 import path from 'path';
+import mime from 'mime-types';
 
 class FilesController {
     static async postUpload(req, res) {
@@ -183,6 +184,63 @@ class FilesController {
     const updatedFile = await db.collection('files').findOne({ _id: ObjectId(id) });
     return res.status(200).json(updatedFile);
   }
+     static async getFile(req, res) {
+    const token = req.headers['x-token'];
+    const { id } = req.params;
+    const { size } = req.query;  // Extract the size query parameter (500, 250, or 100)
+
+    try {
+        // Retrieve the user ID from the token
+        const userId = await redisClient.get(`auth_${token}`);
+        const db = dbClient.getDb();
+        const file = await db.collection('files').findOne({ _id: ObjectId(id) });
+
+        // If file is not found
+        if (!file) {
+            return res.status(404).json({ error: 'Not found' });
+        }
+
+        // Check if the file is public or if the user is the owner
+        if (!file.isPublic && (!userId || file.userId.toString() !== userId)) {
+            return res.status(404).json({ error: 'Not found' });
+        }
+
+        // If the file is a folder, return an error
+        if (file.type === 'folder') {
+            return res.status(400).json({ error: "A folder doesn't have content" });
+        }
+
+        // Check if a size query is provided and if the requested thumbnail exists
+        let filePath = file.localPath;
+        if (size) {
+            const validSizes = ['500', '250', '100'];
+            if (!validSizes.includes(size)) {
+                return res.status(400).json({ error: 'Invalid size parameter' });
+            }
+
+            // Construct the thumbnail file path by appending the size
+            const thumbnailPath = `${filePath}_${size}`;
+            if (fs.existsSync(thumbnailPath)) {
+                filePath = thumbnailPath;  // Use the thumbnail file path if it exists
+            } else {
+                return res.status(404).json({ error: 'Not found' });
+            }
+        }
+
+        // Check if the original file or thumbnail exists locally
+        if (!fs.existsSync(filePath)) {
+            return res.status(404).json({ error: 'Not found' });
+        }
+
+        // Get the MIME type of the file
+        const mimeType = mime.lookup(file.name) || 'application/octet-stream';
+
+        // Read and return the file's content
+        return res.status(200).set('Content-Type', mimeType).sendFile(path.resolve(filePath));
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ error: 'Internal server error' });
+    }
 }
 
 export default FilesController;
