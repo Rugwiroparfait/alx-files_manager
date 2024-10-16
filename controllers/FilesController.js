@@ -76,6 +76,68 @@ class FilesController {
 
         return res.status(201).json(result.ops[0]);
     }
+     static async getShow(req, res) {
+        const { id } = req.params;
+        const token = req.headers['x-token'];
+
+        try {
+            // Get user ID from Redis based on token
+            const userId = await redisClient.get(`auth_${token}`);
+            if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+            // Fetch file by ID and check if it belongs to the user
+            const file = await dbClient.db.collection('files').findOne({ _id: ObjectId(id), userId });
+            if (!file) return res.status(404).json({ error: 'Not found' });
+
+            return res.status(200).json({
+                id: file._id,
+                userId: file.userId,
+                name: file.name,
+                type: file.type,
+                isPublic: file.isPublic,
+                parentId: file.parentId,
+            });
+        } catch (error) {
+            console.error('Error in getShow:', error);
+            return res.status(500).json({ error: 'Internal server error' });
+        }
+    }
+
+    // List all files for the user, with optional parentId and pagination
+    static async getIndex(req, res) {
+        const token = req.headers['x-token'];
+        const { parentId = 0, page = 0 } = req.query;
+        const ITEMS_PER_PAGE = 20;
+        const skip = parseInt(page, 10) * ITEMS_PER_PAGE;
+
+        try {
+            // Get user ID from Redis based on token
+            const userId = await redisClient.get(`auth_${token}`);
+            if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+            // Find files based on user and parentId, apply pagination
+            const query = { userId, parentId };
+            const files = await dbClient.db.collection('files')
+                .find(query)
+                .skip(skip)
+                .limit(ITEMS_PER_PAGE)
+                .toArray();
+
+            const result = files.map(file => ({
+                id: file._id,
+                userId: file.userId,
+                name: file.name,
+                type: file.type,
+                isPublic: file.isPublic,
+                parentId: file.parentId,
+            }));
+
+            return res.status(200).json(result);
+        } catch (error) {
+            console.error('Error in getIndex:', error);
+            return res.status(500).json({ error: 'Internal server error' });
+        }
+    }
 }
 
 export default FilesController;
