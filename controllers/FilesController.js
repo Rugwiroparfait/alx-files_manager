@@ -138,6 +138,51 @@ class FilesController {
             return res.status(500).json({ error: 'Internal server error' });
         }
     }
+     // PUT /files/:id/publish
+  static async putPublish(req, res) {
+    const { id } = req.params;
+    const token = req.headers['x-token'];
+    
+    // Retrieve the user based on the token
+    const userId = await redisClient.get(`auth_${token}`);
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+    
+    const db = dbClient.getDb();
+    const file = await db.collection('files').findOne({ _id: ObjectId(id), userId });
+    
+    // If no file document is linked to the user and the ID, return a 404
+    if (!file) return res.status(404).json({ error: 'Not found' });
+    
+    // Update the value of isPublic to true
+    await db.collection('files').updateOne({ _id: ObjectId(id) }, { $set: { isPublic: true } });
+    
+    // Return the updated file document
+    const updatedFile = await db.collection('files').findOne({ _id: ObjectId(id) });
+    return res.status(200).json(updatedFile);
+  }
+
+  // PUT /files/:id/unpublish
+  static async putUnpublish(req, res) {
+    const { id } = req.params;
+    const token = req.headers['x-token'];
+    
+    // Retrieve the user based on the token
+    const userId = await redisClient.get(`auth_${token}`);
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+    
+    const db = dbClient.getDb();
+    const file = await db.collection('files').findOne({ _id: ObjectId(id), userId });
+    
+    // If no file document is linked to the user and the ID, return a 404
+    if (!file) return res.status(404).json({ error: 'Not found' });
+    
+    // Update the value of isPublic to false
+    await db.collection('files').updateOne({ _id: ObjectId(id) }, { $set: { isPublic: false } });
+    
+    // Return the updated file document
+    const updatedFile = await db.collection('files').findOne({ _id: ObjectId(id) });
+    return res.status(200).json(updatedFile);
+  }
 }
 
 export default FilesController;
