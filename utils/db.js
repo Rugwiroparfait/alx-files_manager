@@ -25,7 +25,7 @@ class DBClient {
 
     // Function to check if MongoDB is alive
     isAlive() {
-        return this.client.isConnected();
+        return this.client && this.client.topology && this.client.topology.isConnected();
     }
 
     // Function to get a database instance
